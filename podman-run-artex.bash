@@ -92,6 +92,7 @@ podman run -d \
   --env OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
   --env OLLAMA_MODEL="$MODEL" \
   --env ARTEX_MODEL="$MODEL" \
+  --env ARTEX_SECRET_KEY="${ARTEX_SECRET_KEY:-}" \
   --publish "${PORT}:8787" \
   --volume "${DATA_DIR}:/data:Z" \
   --volume "${SKILLS_DIR}:/skills:ro,Z" \
