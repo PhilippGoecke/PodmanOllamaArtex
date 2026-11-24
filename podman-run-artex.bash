@@ -7,7 +7,7 @@ PORT="${ARTEX_PORT:-8787}"
 DATA_DIR="${ARTEX_DATA_DIR:-$PWD/data}"
 SKILLS_DIR="${ARTEX_SKILLS_DIR:-$PWD/skills}"
 OLLAMA_HOST_URL="${OLLAMA_HOST:-http://host.containers.internal:11434}"
-MODEL="${ARTEX_MODEL:?ARTEX_MODEL is not set (e.g. export ARTEX_MODEL=llama3.1)}"
+MODEL="${ARTEX_MODEL:-inkling-2-mini:26b-a5b}"
 
 if ! command -v podman >/dev/null 2>&1; then
   echo "podman is not installed" >&2
