@@ -17,21 +17,15 @@ PG_VOLUME="${ARTEX_PG_VOLUME:-artex-pgdata}"
 PG_USER="${POSTGRES_USER:-artex}"
 PG_DB="${POSTGRES_DB:-artex}"
 
-if ! command -v podman >/dev/null 2>&1; then
-  echo "podman is not installed" >&2
-  exit 1
-fi
-
-if ! command -v git >/dev/null 2>&1; then
-  echo "git is not installed" >&2
-  exit 1
-fi
+for cmd in podman git; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd is not installed" >&2; exit 1; }
+done
 
 # Clone or update the repository
 if [ -d "$SRC_DIR/.git" ]; then
   git -C "$SRC_DIR" pull --ff-only
 else
-  git clone "$REPO_URL" "$SRC_DIR"
+  git clone --depth 1 "$REPO_URL" "$SRC_DIR"
 fi
 
 # Create .env from the example if missing
@@ -64,21 +58,23 @@ podman rm -f "$CONTAINER_NAME" "$PG_CONTAINER" >/dev/null 2>&1 || true
 podman run -d \
   --name "$PG_CONTAINER" \
   --network "$NETWORK" \
-  -e POSTGRES_USER="$PG_USER" \
-  -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-  -e POSTGRES_DB="$PG_DB" \
-  -v "${PG_VOLUME}:/var/lib/postgresql/data:Z" \
+  --env POSTGRES_USER="$PG_USER" \
+  --env POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+  --env POSTGRES_DB="$PG_DB" \
+  --volume "${PG_VOLUME}:/var/lib/postgresql/data:Z" \
   "$PG_IMAGE"
 
 # Wait until Postgres is ready
 echo "Waiting for Postgres..."
+ready=0
 for _ in $(seq 1 30); do
   if podman exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1; then
+    ready=1
     break
   fi
   sleep 1
 done
-podman exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null
+[ "$ready" -eq 1 ] || { echo "Postgres did not become ready" >&2; exit 1; }
 
 # Start artex
 podman run -d \
@@ -86,19 +82,19 @@ podman run -d \
   --network "$NETWORK" \
   --add-host=host.containers.internal:host-gateway \
   --env-file "$SRC_DIR/.env" \
-  -e ARTEX_PG_DSN="postgresql://${PG_USER}:${POSTGRES_PASSWORD}@${PG_CONTAINER}:5432/${PG_DB}" \
-  -e ARTEX_PG_HOST="$PG_CONTAINER" \
-  -e ARTEX_PG_PORT="5432" \
-  -e ARTEX_PG_USER="$PG_USER" \
-  -e ARTEX_PG_PASSWORD="$POSTGRES_PASSWORD" \
-  -e ARTEX_PG_DBNAME="$PG_DB" \
-  -e OLLAMA_HOST="$OLLAMA_HOST_URL" \
-  -e OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
-  -e OLLAMA_MODEL="$MODEL" \
-  -e ARTEX_MODEL="$MODEL" \
-  -p "${PORT}:8787" \
-  -v "${DATA_DIR}:/data:Z" \
-  -v "${SKILLS_DIR}:/skills:ro,Z" \
+  --env ARTEX_PG_DSN="postgresql://${PG_USER}:${POSTGRES_PASSWORD}@${PG_CONTAINER}:5432/${PG_DB}" \
+  --env ARTEX_PG_HOST="$PG_CONTAINER" \
+  --env ARTEX_PG_PORT="5432" \
+  --env ARTEX_PG_USER="$PG_USER" \
+  --env ARTEX_PG_PASSWORD="$POSTGRES_PASSWORD" \
+  --env ARTEX_PG_DBNAME="$PG_DB" \
+  --env OLLAMA_HOST="$OLLAMA_HOST_URL" \
+  --env OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
+  --env OLLAMA_MODEL="$MODEL" \
+  --env ARTEX_MODEL="$MODEL" \
+  --publish "${PORT}:8787" \
+  --volume "${DATA_DIR}:/data:Z" \
+  --volume "${SKILLS_DIR}:/skills:ro,Z" \
   "$IMAGE" "$@"
 
 echo "artex is running as '$CONTAINER_NAME' on port $PORT"
