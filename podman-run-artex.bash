@@ -7,6 +7,7 @@ PORT="${ARTEX_PORT:-8787}"
 DATA_DIR="${ARTEX_DATA_DIR:-$PWD/data}"
 SKILLS_DIR="${ARTEX_SKILLS_DIR:-$PWD/skills}"
 OLLAMA_HOST_URL="${OLLAMA_HOST:-http://host.containers.internal:11434}"
+MODEL="${ARTEX_MODEL:?ARTEX_MODEL is not set (e.g. export ARTEX_MODEL=llama3.1)}"
 
 if ! command -v podman >/dev/null 2>&1; then
   echo "podman is not installed" >&2
@@ -23,11 +24,14 @@ podman run -d \
   --add-host=host.containers.internal:host-gateway \
   -e OLLAMA_HOST="$OLLAMA_HOST_URL" \
   -e OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
+  -e OLLAMA_MODEL="$MODEL" \
+  -e ARTEX_MODEL="$MODEL" \
   -p "${PORT}:8080" \
   -v "${DATA_DIR}:/data:Z" \
   -v "${SKILLS_DIR}:/skills:ro,Z" \
   "$IMAGE" "$@"
 
 echo "artex is running as '$CONTAINER_NAME' on port $PORT"
+echo "Model: $MODEL"
 echo "Skills mounted from: $SKILLS_DIR"
 echo "Logs: podman logs -f $CONTAINER_NAME"
