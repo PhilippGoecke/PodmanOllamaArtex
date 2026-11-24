@@ -10,6 +10,12 @@ DATA_DIR="${ARTEX_DATA_DIR:-$PWD/data}"
 SKILLS_DIR="${ARTEX_SKILLS_DIR:-$PWD/skills}"
 OLLAMA_HOST_URL="${OLLAMA_HOST:-http://host.containers.internal:11434}"
 MODEL="${ARTEX_MODEL:-inkling-2-mini:26b-a5b}"
+NETWORK="${ARTEX_NETWORK:-artex-net}"
+PG_CONTAINER="${ARTEX_PG_CONTAINER:-artex-postgres}"
+PG_IMAGE="${ARTEX_PG_IMAGE:-docker.io/library/postgres:16}"
+PG_VOLUME="${ARTEX_PG_VOLUME:-artex-pgdata}"
+PG_USER="${POSTGRES_USER:-artex}"
+PG_DB="${POSTGRES_DB:-artex}"
 
 if ! command -v podman >/dev/null 2>&1; then
   echo "podman is not installed" >&2
@@ -34,17 +40,56 @@ if [ ! -f "$SRC_DIR/.env" ]; then
   echo "Created $SRC_DIR/.env - set POSTGRES_PASSWORD (and optionally ANTHROPIC_API_KEY) before running." >&2
 fi
 
+# Load .env (POSTGRES_PASSWORD etc.)
+set -a
+# shellcheck disable=SC1091
+. "$SRC_DIR/.env"
+set +a
+
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in $SRC_DIR/.env}"
+
 # Build the image
 podman build -t "$IMAGE" "$SRC_DIR"
 
 mkdir -p "$DATA_DIR" "$SKILLS_DIR"
 
-# Remove any previous container with the same name
-podman rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+# Network and volume
+podman network exists "$NETWORK" || podman network create "$NETWORK"
+podman volume exists "$PG_VOLUME" || podman volume create "$PG_VOLUME"
 
+# Remove previous containers
+podman rm -f "$CONTAINER_NAME" "$PG_CONTAINER" >/dev/null 2>&1 || true
+
+# Start Postgres
+podman run -d \
+  --name "$PG_CONTAINER" \
+  --network "$NETWORK" \
+  -e POSTGRES_USER="$PG_USER" \
+  -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+  -e POSTGRES_DB="$PG_DB" \
+  -v "${PG_VOLUME}:/var/lib/postgresql/data:Z" \
+  "$PG_IMAGE"
+
+# Wait until Postgres is ready
+echo "Waiting for Postgres..."
+for _ in $(seq 1 30); do
+  if podman exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+podman exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null
+
+# Start artex
 podman run -d \
   --name "$CONTAINER_NAME" \
+  --network "$NETWORK" \
   --add-host=host.containers.internal:host-gateway \
+  --env-file "$SRC_DIR/.env" \
+  -e DATABASE_URL="postgresql://${PG_USER}:${POSTGRES_PASSWORD}@${PG_CONTAINER}:5432/${PG_DB}" \
+  -e POSTGRES_HOST="$PG_CONTAINER" \
+  -e POSTGRES_USER="$PG_USER" \
+  -e POSTGRES_DB="$PG_DB" \
   -e OLLAMA_HOST="$OLLAMA_HOST_URL" \
   -e OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
   -e OLLAMA_MODEL="$MODEL" \
@@ -55,6 +100,8 @@ podman run -d \
   "$IMAGE" "$@"
 
 echo "artex is running as '$CONTAINER_NAME' on port $PORT"
+echo "Postgres: $PG_CONTAINER (volume: $PG_VOLUME)"
 echo "Model: $MODEL"
 echo "Skills mounted from: $SKILLS_DIR"
 echo "Logs: podman logs -f $CONTAINER_NAME"
+echo "Postgres logs: podman logs -f $PG_CONTAINER"
