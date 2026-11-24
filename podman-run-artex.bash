@@ -86,10 +86,6 @@ podman run -d \
   --network "$NETWORK" \
   --add-host=host.containers.internal:host-gateway \
   --env-file "$SRC_DIR/.env" \
-  -e DATABASE_URL="postgresql://${PG_USER}:${POSTGRES_PASSWORD}@${PG_CONTAINER}:5432/${PG_DB}" \
-  -e POSTGRES_HOST="$PG_CONTAINER" \
-  -e POSTGRES_USER="$PG_USER" \
-  -e POSTGRES_DB="$PG_DB" \
   -e ARTEX_PG_DSN="postgresql://${PG_USER}:${POSTGRES_PASSWORD}@${PG_CONTAINER}:5432/${PG_DB}" \
   -e ARTEX_PG_HOST="$PG_CONTAINER" \
   -e ARTEX_PG_PORT="5432" \
@@ -100,7 +96,7 @@ podman run -d \
   -e OLLAMA_BASE_URL="$OLLAMA_HOST_URL" \
   -e OLLAMA_MODEL="$MODEL" \
   -e ARTEX_MODEL="$MODEL" \
-  -p "${PORT}:8080" \
+  -p "${PORT}:8787" \
   -v "${DATA_DIR}:/data:Z" \
   -v "${SKILLS_DIR}:/skills:ro,Z" \
   "$IMAGE" "$@"
