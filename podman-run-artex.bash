@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${ARTEX_IMAGE:-artex:latest}"
+IMAGE="${ARTEX_IMAGE:-docker.io/artex:latest}"
 CONTAINER_NAME="${ARTEX_CONTAINER_NAME:-artex}"
 PORT="${ARTEX_PORT:-8787}"
 DATA_DIR="${ARTEX_DATA_DIR:-$PWD/data}"
